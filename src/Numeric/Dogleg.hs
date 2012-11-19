@@ -29,6 +29,11 @@ data SearchParams a =
                , stepShrink :: a 
                -- ^ Scale factor 'stepSize' is multiplied by on each
                -- iteration.
+               , dropWorstBasis :: Bool
+               -- ^ Drop the least effective basis vector on each
+               -- iteration. Given that a new basis vector is added on
+               -- each iteration, this preserves the total number of
+               -- basis vectors used for each taxi-cab step.
                , useGolden :: Bool
                -- ^ Perform a golden section search for optimal
                -- parameters after the uniform sampling probe. If
@@ -37,7 +42,7 @@ data SearchParams a =
                }
 
 defaultParams :: Floating a => SearchParams a
-defaultParams = SearchParams 4 2 80 10 0.5 True
+defaultParams = SearchParams 4 2 80 10 0.5 True True
 
 -- |@optimize searchParams x basis valid eval@ finds a minimal value
 -- of the function @eval@ starting at coordinate @x@. The search makes
@@ -70,8 +75,11 @@ optimizeM sp params ok eval = go 0 (stepSize sp) params (basisFor params)
 -- | @updateBasis basis gains goodDir@ updates @basis@ by dropping the
 -- vector with lowest @gain@ and replacing it with @goodDir@.
 updateBasis :: (Floating a, Ord t, Epsilon a, Metric f, Show (f a)) =>
-               [f a] -> [t] -> f a -> [f a]
-updateBasis basis gains goodDir = take i basis ++ goodDir:drop (i+1) basis
+               SearchParams a -> [f a] -> [t] -> f a -> [f a]
+updateBasis sp basis gains goodDir = 
+  if dropWorstBasis sp 
+  then take i basis ++ goodDir:drop (i+1) basis
+  else goodDir : basis
   where (_, i) = minimum $ zip gains [0..]
 -- updateBasis basis _ goodDir = goodDir : basis -- don't drop a basis vector
  
@@ -88,7 +96,7 @@ optimize' ok eval sp bigStepSize params basis =
   let (p', revGains) = foldl' minLinear (params,[]) basis -- taxi cab method
       goodDir = normalize $ p' ^-^ params
       (p'',_) = minLinear (p',[]) goodDir -- Powell
-  in (p'', updateBasis basis (reverse revGains) goodDir)
+  in (p'', updateBasis sp basis (reverse revGains) goodDir)
   where -- Define how many steps of what size we'll take
         smallStepSize = bigStepSize * 0.1
         half = numSamples sp `quot` 2
@@ -155,7 +163,7 @@ optimizeM' ok eval sp bigStepSize params basis =
   do (p', revGains) <- foldM minLinear (params,[]) basis -- taxi cab method
      let goodDir = normalize $ p' ^-^ params
      (p'',_) <- minLinear (p',[]) goodDir -- Powell
-     return $ (p'', updateBasis basis (reverse revGains) goodDir)
+     return $ (p'', updateBasis sp basis (reverse revGains) goodDir)
   where -- Define how many steps of what size we'll take
         smallStepSize = bigStepSize * 0.1
         half = numSamples sp `quot` 2
