@@ -73,6 +73,7 @@ updateBasis :: (Floating a, Ord t, Epsilon a, Metric f, Show (f a)) =>
                [f a] -> [t] -> f a -> [f a]
 updateBasis basis gains goodDir = take i basis ++ goodDir:drop (i+1) basis
   where (_, i) = minimum $ zip gains [0..]
+-- updateBasis basis _ goodDir = goodDir : basis -- don't drop a basis vector
  
 -- |@optimize' valid f n useGolden stepSize initialGuess basis@ finds
 -- a locally optimal set of parameters satisfying the @valid@
