@@ -67,7 +67,7 @@ optimizeM :: (Show (t a), Metric t, Ord b, Num b, Traversable t, Enum a,
 optimizeM sp params ok eval = go 0 (stepSize sp) params (basisFor params)
   where go i s p b | i == maxIter sp = return p
                    | otherwise = do (p',b') <- opt s p b
-                                    if qd p' p < 2
+                                    if qd p' p < noChange sp
                                     then return p'
                                     else go (i+1) (s * stepShrink sp) p' b'
         opt = optimizeM' ok eval sp
