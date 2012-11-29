@@ -41,15 +41,17 @@ data SearchParams a =
                -- the uniformly spaced probe.
                }
 
+-- |Default 'SearchParams' suitable for searching parameter space
+-- whose components vary are taken from the range [-1,1].
 defaultParams :: Floating a => SearchParams a
-defaultParams = SearchParams 4 2 80 10 0.5 True True
+defaultParams = SearchParams 4 0.01 0.2 11 0.5 True True
 
--- |@optimize searchParams x basis valid eval@ finds a minimal value
--- of the function @eval@ starting at coordinate @x@. The search makes
--- use of a @basis@ of the vector space of which @x@ is an element,
--- and a validity predicate, @valid@, that may be used to bound the
--- search. The @searchParams@ field controls the iterative aspects of
--- the search.
+-- |@optimize searchParams initialGuess basis valid eval@ finds a
+-- minimal value of the function @eval@ starting at coordinate
+-- @initialGuess@. The search makes use of a @basis@ of the vector
+-- space of which @initialGuess@ is an element, and a validity
+-- predicate, @valid@, that may be used to bound the search. The
+-- @searchParams@ field controls the iterative aspects of the search.
 optimize :: (Show (t a), Metric t, Ord b, Num b, Traversable t, Enum a,
              Epsilon a, RealFrac a, Floating a, Show a, Show b) =>
             SearchParams a -> t a -> (t a -> Bool) -> (t a -> b) -> t a
@@ -61,6 +63,13 @@ optimize sp params ok eval = go 0 (stepSize sp) params (basisFor params)
                                     else go (i+1) (s * stepShrink sp) p' b'
         opt = optimize' ok eval sp
 
+-- |@optimizeM searchParams initialGuess basis valid eval@ finds a
+-- minimal value of the monadic function @eval@ starting at coordinate
+-- @initialGuess@. The search makes use of a @basis@ of the vector
+-- space of which @initialGuess@ is an element, and a validity
+-- predicate, @valid@, that may be used to reject some candidate
+-- parameters. The @searchParams@ field controls the iterative aspects
+-- of the search.
 optimizeM :: (Show (t a), Metric t, Ord b, Num b, Traversable t, Enum a,
              Epsilon a, RealFrac a, Floating a, Show a, Show b, Monad m) =>
             SearchParams a -> t a -> (t a -> Bool) -> (t a -> m b) -> m (t a)
@@ -81,7 +90,6 @@ updateBasis sp basis gains goodDir =
   then take i basis ++ goodDir:drop (i+1) basis
   else goodDir : basis
   where (_, i) = minimum $ zip gains [0..]
--- updateBasis basis _ goodDir = goodDir : basis -- don't drop a basis vector
  
 -- |@optimize' valid f n useGolden stepSize initialGuess basis@ finds
 -- a locally optimal set of parameters satisfying the @valid@
