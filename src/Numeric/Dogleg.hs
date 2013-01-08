@@ -42,7 +42,7 @@ data SearchParams a =
                }
 
 -- |Default 'SearchParams' suitable for searching parameter space
--- whose components vary are taken from the range [-1,1].
+-- whose components are taken from the range [-1,1].
 defaultParams :: Floating a => SearchParams a
 defaultParams = SearchParams 4 0.01 0.2 11 0.5 True True
 
