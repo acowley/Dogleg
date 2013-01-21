@@ -52,8 +52,8 @@ defaultParams = SearchParams 4 0.01 0.2 11 0.5 True True
 -- space of which @initialGuess@ is an element, and a validity
 -- predicate, @valid@, that may be used to bound the search. The
 -- @searchParams@ field controls the iterative aspects of the search.
-optimize :: (Show (t a), Metric t, Ord b, Num b, Traversable t, Enum a,
-             Epsilon a, RealFrac a, Floating a, Show a, Show b) =>
+optimize :: (Show (t a), Metric t, Applicative t, Ord b, Num b, Traversable t, 
+             Enum a, Epsilon a, RealFrac a, Floating a, Show a, Show b) =>
             SearchParams a -> t a -> (t a -> Bool) -> (t a -> b) -> t a
 optimize sp params ok eval = go 0 (stepSize sp) params (basisFor params)
   where go i s p b | i == maxIter sp = p
@@ -70,8 +70,9 @@ optimize sp params ok eval = go 0 (stepSize sp) params (basisFor params)
 -- predicate, @valid@, that may be used to reject some candidate
 -- parameters. The @searchParams@ field controls the iterative aspects
 -- of the search.
-optimizeM :: (Show (t a), Metric t, Ord b, Num b, Traversable t, Enum a,
-             Epsilon a, RealFrac a, Floating a, Show a, Show b, Monad m) =>
+optimizeM :: (Show (t a), Metric t, Applicative t, Ord b, Num b, Traversable t, 
+              Enum a, Epsilon a, RealFrac a, Floating a, Show a, Show b, 
+              Monad m) =>
             SearchParams a -> t a -> (t a -> Bool) -> (t a -> m b) -> m (t a)
 optimizeM sp params ok eval = go 0 (stepSize sp) params (basisFor params)
   where go i s p b | i == maxIter sp = return p
