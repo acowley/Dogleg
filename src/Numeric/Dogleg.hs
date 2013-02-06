@@ -89,7 +89,8 @@ updateBasis :: (Floating a, Ord t, Epsilon a, Metric f, Show (f a)) =>
 updateBasis sp basis gains goodDir = 
   if dropWorstBasis sp 
   then take i basis ++ goodDir:drop (i+1) basis
-  else goodDir : basis
+  -- else goodDir : basis
+  else basis
   where (_, i) = minimum $ zip gains [0..]
  
 -- |@optimize' valid f n useGolden stepSize initialGuess basis@ finds
