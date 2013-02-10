@@ -1,5 +1,5 @@
 name:                Dogleg
-version:             0.1.0.0
+version:             0.1.1
 synopsis:            Powell's "dogleg" nonlinear optimization algorithm.
 -- description:         
 license:             BSD3
@@ -13,6 +13,7 @@ cabal-version:       >=1.10
 
 library
   exposed-modules:     Numeric.Dogleg
-  build-depends:       base >=4.6 && < 5, vector >= 0.10, linear >=0.4
+  build-depends:       base >=4.6 && < 5, vector >= 0.10, linear >=0.4,
+                       transformers
   hs-source-dirs:      src
   default-language:    Haskell2010
