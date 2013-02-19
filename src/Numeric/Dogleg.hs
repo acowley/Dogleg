@@ -53,7 +53,7 @@ defaultParams = SearchParams 4 0.01 0.2 11 0.5 True True
 -- @searchParams@ field controls the iterative aspects of the search.
 optimize :: (Enum a, Floating a, Num b, Ord b, RealFrac a, Show (t a), Show a,
              Show b, Applicative t, Traversable t, Metric t, Epsilon a)
-         => SearchParams a -> t a -> (t a -> Bool) -> (t a -> b) -> t a
+         => SearchParams a -> t a -> (t a -> Bool) -> (t a -> b) -> (t a, b)
 optimize sp params ok eval = runIdentity $ 
                              optimizeM sp params ok (Identity . eval)
 
@@ -63,7 +63,8 @@ optimize sp params ok eval = runIdentity $
 optimizeBatch :: (Enum a, Floating a, Num b, Ord b, RealFrac a, Show (t a),
                   Show a, Show b, Applicative t, Traversable t, Metric t,
                   Epsilon a)
-              => SearchParams a -> t a -> (t a -> Bool) -> ([t a] -> [b]) -> t a
+              => SearchParams a -> t a -> (t a -> Bool) -> ([t a] -> [b])
+              -> (t a, b)
 optimizeBatch sp params ok eval = runIdentity $ 
                                   optimizeBatchM sp params ok (Identity . eval)
 
@@ -77,7 +78,8 @@ optimizeBatch sp params ok eval = runIdentity $
 optimizeM :: (Enum a, Floating a, Monad m, Functor m, Num b, Ord b,
               RealFrac a, Show (t a), Show a, Show b, Applicative t,
               Traversable t, Metric t, Epsilon a)
-          => SearchParams a -> t a -> (t a -> Bool) -> (t a -> m b) -> m (t a)
+          => SearchParams a -> t a -> (t a -> Bool) -> (t a -> m b)
+          -> m (t a, b)
 optimizeM sp params ok eval = optimizeBatchM sp params ok (mapM eval)
 
 -- |Similar to @optimizeM@, but the user-supplied evaluation function
@@ -87,12 +89,14 @@ optimizeBatchM :: (Enum a, Floating a, Monad m, Functor m, Num b, Ord b,
                    RealFrac a, Show (t a), Show a, Show b, Applicative t,
                    Traversable t, Metric t, Epsilon a)
                => SearchParams a -> t a -> (t a -> Bool) -> ([t a] -> m [b])
-               -> m (t a)
+               -> m (t a, b)
 optimizeBatchM sp params ok eval = go 0 (stepSize sp) params (basisFor params)
-  where go i s p b | i == maxIter sp = return p
-                   | otherwise = do (p',b') <- opt s p b
-                                    if qd p' p < noChange sp
-                                    then return p'
+  where go i s p b | i == maxIter sp = error $ "Optimization needs to run "++
+                                               "for at least one iteration!"
+                   | otherwise = do (e, p',b') <- opt s p b
+                                    if qd p' p < noChange sp 
+                                       || i == maxIter sp - 1
+                                    then return (p', e)
                                     else go (i+1) (s * stepShrink sp) p' b'
         opt = optimizeM' ok eval sp
 
@@ -107,16 +111,24 @@ updateBasis sp basis gains goodDir =
   else basis
   where (_, i) = minimum $ zip gains [0..]
 
+-- Strict pair
+data P a b = P !a !b
+psnd :: P a b -> b
+psnd (P _ y) = y
+
 optimizeM' :: forall t a b m. 
               (Show (t a), Ord b, Num b, Metric t, Epsilon a, Applicative t, 
               RealFrac a, Floating a, Show a, Show b, Functor m, Monad m) =>
             (t a -> Bool) -> ([t a] -> m [b]) -> SearchParams a -> a -> t a -> 
-            [t a] -> m (t a, [t a])
+            [t a] -> m (b, t a, [t a])
 optimizeM' ok eval sp bigStepSize params basis = 
-  do (p', revGains) <- foldM minLinear (params,[]) basis -- taxi cab method
+  do -- taxi cab method
+     P p' revGains <- foldM ((fmap psnd .) . minLinear) 
+                            (P params []) 
+                            basis
      let goodDir = normalize $ p' ^-^ params
-     (p'',_) <- minLinear (p',[]) goodDir -- Powell
-     return $ (p'', updateBasis sp basis (reverse revGains) goodDir)
+     P e (P p'' _) <- minLinear (P p' []) goodDir -- Powell
+     return $ (e, p'', updateBasis sp basis (reverse revGains) goodDir)
   where -- Define how many steps of what size we'll take
         smallStepSize = bigStepSize * 0.1
         half = numSamples sp `quot` 2
@@ -124,10 +136,11 @@ optimizeM' ok eval sp bigStepSize params basis =
         takeStep :: Int -> a
         takeStep = (bigStepSize*) . fromIntegral . subtract half
         -- Perform a linear search from parameters @p@ along basis
-        -- vector @b@. Returns a new set of parameters and conses the
-        -- improvement gleaned from the search to the @gains@ list.
-        minLinear :: (t a, [b]) -> t a -> m (t a, [b])
-        minLinear (p,gains) b = 
+        -- vector @b@. Returns the computed cost, a new set of
+        -- parameters, and conses the improvement gleaned from the
+        -- search to the @gains@ list.
+        minLinear :: P (t a) [b] -> t a -> m (P b (P (t a) [b]))
+        minLinear (P p gains) b = 
           let mkP = (p ^+^) . ( b ^*) -- Convert step to parameter vector
               schwartz x = (mkP x, x) -- Pair a step with a parameter
 
@@ -139,7 +152,7 @@ optimizeM' ok eval sp bigStepSize params basis =
           in do ss <- V.fromList <$> eval (V.toList ps)
                 let startingCost = ss ! (fromJust $ V.elemIndex 0 inds)
                     i = V.minIndex ss
-                if | V.null ps -> return (p, 0:gains)
+                if | V.null ps -> return (P startingCost (P p (0:gains)))
                    | useGolden sp && i > 0 && i < (V.length ss - 1) ->
                      do x <- linearSearchM (inds ! (i-1))
                                            (inds ! i)
@@ -147,8 +160,11 @@ optimizeM' ok eval sp bigStepSize params basis =
                                            smallStepSize
                                            (eval . map mkP)
                         [bestCost] <- eval [mkP x]
-                        return (mkP x, (startingCost - bestCost) : gains)
-                   | otherwise -> return (ps ! i, (startingCost - (ss ! i)) : gains)
+                        let dc = startingCost - bestCost
+                        return $ P bestCost (P (mkP x) (dc : gains))
+                   | otherwise -> let c = ss ! i
+                                      dc = startingCost - c
+                                  in return $ P c (P (ps ! i) (dc : gains))
 
 -- Golden section search
 linearSearchM :: (Floating a, RealFrac a, Show b, Show a, Ord b, 
@@ -157,7 +173,7 @@ linearSearchM :: (Floating a, RealFrac a, Show b, Show a, Ord b,
 linearSearchM left center right minStep f =
   do memo <- let n = 1 + ceiling ((right-left) / minStep)
                  toStep x = fromIntegral x * minStep + left
-             in V.fromList <$> f (map toStep [0..n-1])
+             in V.fromList <$> f (map toStep [0..n-1::Int])
      let f' x = memo ! (round $ (x - left) / minStep)
          goldenCheck a b c = let i = snd . minimum $ zip (map f' [a,b,c]) [0..]
                              in if i == 1 then golden a b c else [a,b,c] !! i
