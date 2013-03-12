@@ -28,8 +28,8 @@ data SearchParams a =
                , stepShrink :: a 
                -- ^ Scale factor 'stepSize' is multiplied by on each
                -- iteration.
-               , dropWorstBasis :: Bool
-               -- ^ Drop the least effective basis vector on each
+               , dropBestBasis :: Bool
+               -- ^ Drop the most effective basis vector on each
                -- iteration. Given that a new basis vector is added on
                -- each iteration, this preserves the total number of
                -- basis vectors used for each taxi-cab step.
@@ -105,11 +105,11 @@ optimizeBatchM sp params ok eval = go 0 (stepSize sp) params (basisFor params)
 updateBasis :: (Floating a, Ord t, Epsilon a, Metric f, Show (f a)) =>
                SearchParams a -> [f a] -> [t] -> f a -> [f a]
 updateBasis sp basis gains goodDir = 
-  if dropWorstBasis sp 
+  if dropBestBasis sp 
   then take i basis ++ goodDir:drop (i+1) basis
   -- else goodDir : basis
   else basis
-  where (_, i) = minimum $ zip gains [0..]
+  where (_, i) = maximum $ zip gains [0..]
 
 -- Strict pair
 data P a b = P !a !b
