@@ -6,7 +6,6 @@ module Numeric.Dogleg (SearchParams(..), defaultParams, optimize,
 import Control.Applicative
 import Control.Monad (foldM)
 import Data.Functor.Identity
-import Data.Maybe (fromJust)
 import Data.Traversable (Traversable)
 import Data.Vector ((!))
 import qualified Data.Vector as V
@@ -43,7 +42,7 @@ data SearchParams a =
 -- |Default 'SearchParams' suitable for searching parameter space
 -- whose components are taken from the range [-1,1].
 defaultParams :: Floating a => SearchParams a
-defaultParams = SearchParams 4 0.01 0.2 11 0.5 True True
+defaultParams = SearchParams 4 0.0001 0.2 11 0.5 True True
 
 -- |@optimize searchParams initialGuess basis valid eval@ finds a
 -- minimal value of the function @eval@ starting at coordinate
@@ -106,10 +105,9 @@ updateBasis :: (Floating a, Ord t, Epsilon a, Metric f, Show (f a)) =>
                SearchParams a -> [f a] -> [t] -> f a -> [f a]
 updateBasis sp basis gains goodDir = 
   if dropBestBasis sp 
-  then take i basis ++ goodDir:drop (i+1) basis
-  -- else goodDir : basis
+  then let (_,i) = maximum $ zip gains [0..]
+       in take i basis ++ goodDir:drop (i+1) basis
   else basis
-  where (_, i) = maximum $ zip gains [0..]
 
 -- Strict pair
 data P a b = P !a !b
@@ -123,12 +121,14 @@ optimizeM' :: forall t a b m.
             [t a] -> m (b, t a, [t a])
 optimizeM' ok eval sp bigStepSize params basis = 
   do -- taxi cab method
-     P p' revGains <- foldM ((fmap psnd .) . minLinear) 
-                            (P params []) 
-                            basis
+     P e0 (P p' revGains) <- foldM (minLinear . psnd)
+                                   (P 0 (P params []))
+                                   basis
      let goodDir = normalize $ p' ^-^ params
-     P e (P p'' _) <- minLinear (P p' []) goodDir -- Powell
-     return $ (e, p'', updateBasis sp basis (reverse revGains) goodDir)
+     if nearZero $ quadrance goodDir
+     then (return (e0, p', basis))
+     else do P e (P p'' _) <- minLinear (P p' []) goodDir -- Powell
+             return (e, p'', updateBasis sp basis (reverse revGains) goodDir)
   where -- Define how many steps of what size we'll take
         smallStepSize = bigStepSize * 0.1
         half = numSamples sp `quot` 2
@@ -150,9 +150,11 @@ optimizeM' ok eval sp bigStepSize params basis =
               (ps,inds) = V.unzip . V.filter (ok . fst) $ 
                           V.generate (numSamples sp) (schwartz . takeStep)
           in do ss <- V.fromList <$> eval (V.toList ps)
-                let startingCost = ss ! (fromJust $ V.elemIndex 0 inds)
+                let Just i0 = V.elemIndex 0 inds
+                    startingCost = ss ! i0
                     i = V.minIndex ss
-                if | V.null ps -> return (P startingCost (P p (0:gains)))
+                if | V.null ps || i == i0 -> 
+                     return (P startingCost (P p (0:gains)))
                    | useGolden sp && i > 0 && i < (V.length ss - 1) ->
                      do x <- linearSearchM (inds ! (i-1))
                                            (inds ! i)

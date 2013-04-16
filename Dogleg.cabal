@@ -1,5 +1,5 @@
 name:                Dogleg
-version:             0.1.2
+version:             0.1.2.1
 synopsis:            Powell's "dogleg" nonlinear optimization algorithm.
 -- description:         
 license:             BSD3
