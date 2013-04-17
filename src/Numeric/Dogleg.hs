@@ -126,7 +126,7 @@ optimizeM' ok eval sp bigStepSize params basis =
                                    basis
      let goodDir = normalize $ p' ^-^ params
      if nearZero $ quadrance goodDir
-     then (return (e0, p', basis))
+     then return (e0, p', basis)
      else do P e (P p'' _) <- minLinear (P p' []) goodDir -- Powell
              return (e, p'', updateBasis sp basis (reverse revGains) goodDir)
   where -- Define how many steps of what size we'll take
